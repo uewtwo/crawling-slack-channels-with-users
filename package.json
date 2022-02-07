@@ -4,5 +4,8 @@
     "dotenv": "^16.0.0",
     "fs": "^0.0.1-security",
     "json2csv": "^5.0.6"
+  },
+  "volta": {
+    "node": "16.13.2"
   }
 }
