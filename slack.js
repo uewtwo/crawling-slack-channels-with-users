@@ -21,12 +21,17 @@ async function getChannels() {
     const res = await web.conversations.list(param)
     // Need channel name
     let channels = []
-    res.channels.forEach(c =>
+    res.channels.forEach(c => {
         channels.push(
             {
                 channel_name: c.name,
-                channel_id: c.id
-            }))
+                channel_id: c.id,
+                channel_topic: c.topic.value,
+                channel_purpose: c.purpose.value,
+                channel_creator_id: c.creator
+            }
+        )
+    })
 
     return channels
 }
@@ -77,27 +82,47 @@ const conversationsMemberJson = async () => {
 
     await Promise.all(channels.map(async (c) => {
         const member_list = await getMembersInChannel(c.channel_id)
+        // channel creator を member_list から探す]
+        const creator_id = c.channel_creator_id
+        let creatorInfo
+        let creatorName
+        try {
+            creatorInfo = members[creator_id]
+            creatorName = creatorInfo.user_name
+        } catch (e) {
+            creatorInfo = await getMemberInfo(creator_id)
+            creatorName = creatorInfo.user.name
+            console.log(creatorInfo)
+        }
+
+        // channels in membersに対して一人ずつ member_list と照合する
         for (let i = 0; i < member_list.length; i++) {
             const m = member_list[i]
+            // membersにmember_listのidがあるか確認、なければ直接member_infoを取得
+            let deleted
+            let user_name
+            let stranger
             if (members[m] != undefined) {
-                membersInChannel.push({
-                    channel_name: c.channel_name,
-                    user_name: members[m].user_name,
-                    deleted: members[m].deleted,
-                    stranger: false,
-                    user_id: m
-                })
+                deleted = members[m].deleted
+                user_name = members[m].user_name
+                stranger = false
             } else {
-                const m = member_list[i]
                 const memberInfo = await getMemberInfo(m)
-                membersInChannel.push({
-                    channel_name: c.channel_name,
-                    user_name: memberInfo.user.name,
-                    deleted: null,
-                    stranger: memberInfo.user.is_stranger,
-                    user_id: m
-                })
+                deleted = null
+                user_name = memberInfo.user.name
+                stranger = memberInfo.user.is_stranger
             }
+            membersInChannel.push({
+                channel_name: c.channel_name,
+                channel_topic: c.channel_topic,
+                channel_purpose: c.channel_purpose,
+                channel_creator: creatorName,
+                channel_creator_info: creatorInfo,
+                user_name: user_name,
+                deleted: deleted,
+                stranger: stranger,
+                user_id: m
+            })
         }
     }))
 
@@ -106,7 +131,7 @@ const conversationsMemberJson = async () => {
 
 conversationsMemberJson()
     .then(res => {
-        const csvFields = ["channel_name", "user_name", "deleted", "stranger", "user_id"]
+        const csvFields = ["channel_name", "channel_topic", "channel_purpose", "channel_creator", "channel_creator_info", "user_name", "deleted", "stranger", "user_id"]
         const json2csvParser = new Json2csvParser({ fields: csvFields, header: true})
         const csv = json2csvParser.parse(res)
         const output = fs.createWriteStream("./slack-conversations-member.csv", { encoding: 'utf-8'})
